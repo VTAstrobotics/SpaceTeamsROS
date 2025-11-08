@@ -33,6 +33,14 @@ def generate_launch_description():
         name='image_client',
         output='screen'
     )
+    
+    #Image message type to pointcloud
+    depth_to_pointcloud_node = Node(
+    package='space_teams_python',
+    executable='depth_to_pointcloud',
+    name='depth_to_pointcloud',
+    output='screen'
+)
 
     # example of adding a node to the launch description
     # another_node = Node(
@@ -45,6 +53,6 @@ def generate_launch_description():
     return LaunchDescription([
         port_arg,
         rosbridge_launch,
-        image_client_node # , (make sure to separate with comma if adding a node)
-        # another_node
+        image_client_node, 
+        depth_to_pointcloud_node,
     ])
