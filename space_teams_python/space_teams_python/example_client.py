@@ -37,7 +37,7 @@ class RoverController(Node):
         self.create_subscription(Point, 'LocationLocalFrame', self.location_localFrame_callback, 10)
         self.create_subscription(Point, 'VelocityLocalFrame', self.velocity_localFrame_callback, 10)
         self.create_subscription(Quaternion, 'RotationLocalFrame', self.rotation_localFrame_callback, 10)
-        self.create_subscription(Twist, 'cmd_vel', self.cmd_vel_callback, 2)
+        self.create_subscription(Twist, 'cmd_vel', self.cmd_vel_goal, 2)
 
         self.pid = PID(1, 0.1, 0.05, setpoint=0)
 
