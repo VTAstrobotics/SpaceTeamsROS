@@ -19,7 +19,7 @@ def generate_launch_description():
 
     client_launch = Node( #change to our client code eventually
             package='space_teams_python',
-            executable='example_client.py',
+            executable='example_client',
             output='screen', 
         )
 
