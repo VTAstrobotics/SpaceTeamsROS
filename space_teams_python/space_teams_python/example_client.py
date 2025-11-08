@@ -64,7 +64,7 @@ class RoverController(Node):
     def cmd_vel_goal(self, msg):
         self.goal_cmd_vel = msg
         self.pid.setpoint = self.goal_cmd_vel
-        acceleration = pid.update(self.current_velocity_localFrame)
+        acceleration = self.pid.update(self.current_velocity_localFrame)
         self.send_accelerator_command(acceleration)        
     
     def location_marsFrame_callback(self, msg):
