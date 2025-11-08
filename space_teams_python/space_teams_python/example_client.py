@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 import rclpy
+import numpy as np
 from rclpy.node import Node
 from space_teams_definitions.srv import String, Float
-from geometry_msgs.msg import Point, Quaternion
+from geometry_msgs.msg import PoseWithCovariance, TwistWithCovariance, Pose, Twist, Point, Quaternion, Vector3
+from nav_msgs.msg import Odometry
+from std_msgs.msg import Header
 import math
 import time
 from space_teams_python.transformations import *
@@ -25,6 +28,7 @@ class RoverController(Node):
         self.current_location_marsFrame = None
         self.current_velocity_marsFrame = None
         self.current_rotation_marsFrame = None
+        self.previous_rotation_marsFrame = None
         self.current_location_localFrame = None
         self.current_velocity_localFrame = None
         self.current_rotation_localFrame = None
@@ -38,6 +42,8 @@ class RoverController(Node):
         self.create_subscription(Quaternion, 'RotationLocalFrame', self.rotation_localFrame_callback, 10)
 
         self.create_subscription(Point, 'CoreSamplingComplete', self.core_sampling_complete_callback, 1)
+
+        self.odom_publisher = self.create_publisher(Odometry, '/odom')
 
         # Control state
         self.target_loc_localFrame = None
@@ -56,6 +62,11 @@ class RoverController(Node):
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.get_logger().info('Rover controller is ready.')
 
+        # Timer for odometry message
+        self.timer_odom = self.create_timer(0.1, self.timer_callback_odom)
+        self.get_logger().info('Odom message timer ready')
+
+
     def location_marsFrame_callback(self, msg):
         self.current_location_marsFrame = msg
     
@@ -63,6 +74,7 @@ class RoverController(Node):
         self.current_velocity_marsFrame = msg
 
     def rotation_marsFrame_callback(self, msg):
+        self.previous_rotation_marsFrame = self.current_rotation_marsFrame
         self.current_rotation_marsFrame = msg
 
     def location_localFrame_callback(self, msg):
@@ -257,6 +269,75 @@ class RoverController(Node):
         #     )
         self.navigation_iterations += 1
 
+    def timer_callback_odom(self):
+        odom_msg = Odometry()
+        odom_msg.header = Header()
+        odom_msg.header.stamp = rclpy.clock.Clock().now().to_msg()
+        odom_msg.header.frame_id = 'odom'
+        odom_msg.child_frame_id = 'base_link'
+
+        odom_msg.pose = PoseWithCovariance()
+        odom_msg.pose.pose = Pose()
+        odom_msg.pose.pose.position = self.current_location_marsFrame
+        odom_msg.pose.pose.orientation = self.current_rotation_marsFrame
+        odom_msg.pose.covariance = [0.0] * 36
+
+        odom_msg.twist = TwistWithCovariance()
+        odom_msg.twist.twist = Twist()
+        odom_msg.twist.twist.linear = Vector3(self.current_velocity_localFrame.x,
+                                          self.current_velocity_localFrame.y,
+                                          self.current_velocity_localFrame.z)
+        dt = 0.1
+        q_prev = [self.previous_rotation_marsFrame.w,
+                  self.previous_rotation_marsFrame.x,
+                  self.previous_rotation_marsFrame.y,
+                  self.previous_rotation_marsFrame.z]
+        q_next = [self.current_rotation_marsFrame.w,
+                  self.current_rotation_marsFrame.x,
+                  self.current_rotation_marsFrame.y,
+                  self.current_rotation_marsFrame.z]
+        omega = angular_velocity_body(q_prev, q_next, 0.1)
+        odom_msg.twist.twist.angular = Vector3(omega[0], omega[1], omega[2])
+
+        self.odom_publisher.publish(odom_msg)
+        
+        
+#Quaternion math
+def quat_inverse(q):
+    w, x, y, z = q
+    return np.array([w, -x, -y, -z])
+
+def quat_multiply(q1, q2):
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    w = w1*w2 - x1*x2 - y1*y2 - z1*z2
+    x = w1*x2 + x1*w2 + y1*z2 - z1*y2
+    y = w1*y2 - x1*z2 + y1*w2 + z1*x2
+    z = w1*z2 + x1*y2 - y1*x2 + z1*w2
+    return np.array([w, x, y, z])
+
+def angular_velocity_body(q_prev, q_next, dt):
+    # Ensure shortest path (sign consistency)
+    if np.dot(q_prev, q_next) < 0:
+        q_next = -q_next
+
+    # Compute relative rotation
+    q_delta = quat_multiply(quat_inverse(q_prev), q_next)
+
+    # Extract rotation angle
+    w = np.clip(q_delta[0], -1.0, 1.0)
+    theta = 2 * np.arccos(w)
+
+    # Extract rotation axis
+    axis = q_delta[1:]
+    norm = np.linalg.norm(axis)
+    if norm < 1e-8:
+        omega = np.zeros(3)
+    else:
+        axis = axis / norm
+        omega = axis * theta / dt
+
+    return omega
 
 def main(args=None):
     rclpy.init(args=args)
