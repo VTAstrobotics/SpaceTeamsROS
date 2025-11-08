@@ -6,6 +6,7 @@ from space_teams_definitions.srv import String, Float
 from geometry_msgs.msg import Point, Quaternion
 import math
 import time
+from simple_pid import PID
 from space_teams_python.transformations import *
 
 
@@ -36,6 +37,10 @@ class RoverController(Node):
         self.create_subscription(Point, 'LocationLocalFrame', self.location_localFrame_callback, 10)
         self.create_subscription(Point, 'VelocityLocalFrame', self.velocity_localFrame_callback, 10)
         self.create_subscription(Quaternion, 'RotationLocalFrame', self.rotation_localFrame_callback, 10)
+        self.create_subscription(Twist, 'cmd_vel', self.cmd_vel_callback, 2)
+
+        self.pid = PID(1, 0.1, 0.05, setpoint=0)
+
 
         self.create_subscription(Point, 'CoreSamplingComplete', self.core_sampling_complete_callback, 1)
 
@@ -56,6 +61,12 @@ class RoverController(Node):
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.get_logger().info('Rover controller is ready.')
 
+    def cmd_vel_goal(self, msg):
+        self.goal_cmd_vel = msg
+        self.pid.setpoint = self.goal_cmd_vel
+        acceleration = controlled_system.update(self.current_velocity_localFrame)
+        self.send_accelerator_command(acceleration)        
+    
     def location_marsFrame_callback(self, msg):
         self.current_location_marsFrame = msg
     
