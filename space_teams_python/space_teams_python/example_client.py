@@ -162,7 +162,7 @@ class RoverController(Node):
 
     def start_navigation(self, target_loc_localFrame):
         self.target_loc_localFrame = target_loc_localFrame
-        self.navigation_active = True
+        self.navigation_active = False
         self.navigation_iterations = 0
         self.initial_move_done = False
         self.initial_move_end_time = time.time() + 10.0
