@@ -65,7 +65,7 @@ class RoverController(Node):
     def cmd_vel_goal(self, msg):
         self.goal_cmd_vel = float(msg.linear.x)
         self.pid.setpoint = self.goal_cmd_vel
-        acceleration = float(self.pid(self.current_velocity_localFrame.x))
+        acceleration = float(self.pid(self.current_velocity_localFrame.current_x))
         self.send_accelerator_command(acceleration)     
 
         self.goal_cmd_rotation = msg.angular.z
