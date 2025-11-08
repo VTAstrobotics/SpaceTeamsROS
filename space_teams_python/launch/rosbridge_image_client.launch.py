@@ -51,6 +51,5 @@ def generate_launch_description():
         port_arg,
         rosbridge_launch,
         image_client_node, # , (make sure to separate with comma if adding a node)
-        nav2_launch,
         # another_node
     ])
