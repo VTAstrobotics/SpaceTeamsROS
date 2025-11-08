@@ -70,7 +70,7 @@ class RoverController(Node):
 
         self.goal_cmd_rotation = msg.angular.z
         self.pid_rot.setpoint = self.goal_cmd_vel
-        setpoint = self.pid_rot(self.current_rotation_localFrame)
+        setpoint = self.pid_rot(float(self.current_velocity_localFrame.y))
         self.send_steer_command(setpoint)
     
     def location_marsFrame_callback(self, msg):
