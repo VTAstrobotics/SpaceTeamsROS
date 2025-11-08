@@ -40,6 +40,7 @@ class RoverController(Node):
         self.create_subscription(Twist, 'cmd_vel', self.cmd_vel_goal, 2)
 
         self.pid = PID(1, 0.1, 0.05, setpoint=0)
+        self.pid_rot = PID(1, 0.1, 0.05, setpoint=0)
 
 
         self.create_subscription(Point, 'CoreSamplingComplete', self.core_sampling_complete_callback, 1)
@@ -62,10 +63,15 @@ class RoverController(Node):
         self.get_logger().info('Rover controller is ready.')
 
     def cmd_vel_goal(self, msg):
-        self.goal_cmd_vel = msg
+        self.goal_cmd_vel = msg.linear.x
         self.pid.setpoint = self.goal_cmd_vel
         acceleration = self.pid(self.current_velocity_localFrame)
-        self.send_accelerator_command(acceleration)        
+        self.send_accelerator_command(acceleration)     
+
+        self.goal_cmd_rotation = msg.angular.z
+        self.pid_rot.setpoint = self.goal_cmd_vel
+        setpoint = self.pid_rot(self.current_rotation_localFrame)
+        self.send_steer_command(setpoint)
     
     def location_marsFrame_callback(self, msg):
         self.current_location_marsFrame = msg
