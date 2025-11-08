@@ -42,7 +42,7 @@ class RoverController(Node):
         # Control state
         self.target_loc_localFrame = None
         self.tolerance = 5.0  # meters
-        self.max_speed = 0.5
+        self.max_speed = 0.8
         self.navigation_active = False
         self.navigation_iterations = 0
         self.initial_move_end_time = None
@@ -213,7 +213,7 @@ class RoverController(Node):
             return
         
         # Velocity error
-        speed_limit_kph = 15.0
+        speed_limit_kph = 10.0
         speed_diff_kph = self.calculate_speed_difference(current_vel_localFrame, speed_limit_kph)  # target - current
         accel_factor = remap_clamp(0.0, speed_limit_kph, 0.0, 1.0, speed_diff_kph)  # 1 if not moving, 0 if too fast
         brake_factor = 1.0 - remap_clamp(-speed_limit_kph, 0.0, 0.0, 1.0, speed_diff_kph)  # 0 if <= speed limit, 1 if 2x over
@@ -329,7 +329,7 @@ def main(args=None):
     rover_controller.log_message(
         f"Starting navigation: moving from ({current_x:.2f}, {current_y:.2f}) to ({waypoints_localFrame[0][0]:.2f}, {waypoints_localFrame[0][1]:.2f})"
     )
-    
+
     rover_controller.start_navigation(waypoints_localFrame[0])
 
     try:
