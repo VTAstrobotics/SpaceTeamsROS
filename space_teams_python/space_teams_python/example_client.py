@@ -63,7 +63,7 @@ class RoverController(Node):
         self.get_logger().info('Rover controller is ready.')
 
     def cmd_vel_goal(self, msg):
-        self.goal_cmd_vel = msg.linear.x
+        self.goal_cmd_vel = float(msg.linear.x)
         self.pid.setpoint = self.goal_cmd_vel
         acceleration = self.pid(self.current_velocity_localFrame)
         self.send_accelerator_command(acceleration)     
