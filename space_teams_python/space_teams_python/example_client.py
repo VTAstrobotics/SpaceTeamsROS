@@ -8,6 +8,7 @@ import math
 import time
 from simple_pid import PID
 from space_teams_python.transformations import *
+import numpy as np
 
 
 class RoverController(Node):
@@ -29,6 +30,7 @@ class RoverController(Node):
         self.current_location_localFrame = None
         self.current_velocity_localFrame = None
         self.current_rotation_localFrame = None
+        self.previous_rotation_marsFrame = None
         self.state = "Driving"
 
         self.create_subscription(Point, 'LocationMarsFrame', self.location_marsFrame_callback, 10)
@@ -62,6 +64,44 @@ class RoverController(Node):
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.get_logger().info('Rover controller is ready.')
 
+
+    def quat_inverse(self, q):
+        w, x, y, z = q
+        return np.array([w, -x, -y, -z])
+
+    def quat_multiply(self, q1, q2):
+        w1, x1, y1, z1 = q1
+        w2, x2, y2, z2 = q2
+        w = w1*w2 - x1*x2 - y1*y2 - z1*z2
+        x = w1*x2 + x1*w2 + y1*z2 - z1*y2
+        y = w1*y2 - x1*z2 + y1*w2 + z1*x2
+        z = w1*z2 + x1*y2 - y1*x2 + z1*w2
+        return np.array([w, x, y, z])
+
+
+    def angular_velocity_body(self, q_prev, q_next, dt):
+        # Ensure shortest path (sign consistency)
+        if np.dot(q_prev, q_next) < 0:
+            q_next = -q_next
+
+        # Compute relative rotation
+        q_delta = self.quat_multiply(self.quat_inverse(q_prev), q_next)
+
+        # Extract rotation angle
+        w = np.clip(q_delta[0], -1.0, 1.0)
+        theta = 2 * np.arccos(w)
+
+        # Extract rotation axis
+        axis = q_delta[1:]
+        norm = np.linalg.norm(axis)
+        if norm < 1e-8:
+            omega = np.zeros(3)
+        else:
+            axis = axis / norm
+            omega = axis * theta / dt
+
+        return omega
+
     def cmd_vel_goal(self, msg):
         self.goal_cmd_vel = float(msg.linear.x)
         self.pid.setpoint = self.goal_cmd_vel
@@ -69,9 +109,21 @@ class RoverController(Node):
         self.send_accelerator_command(acceleration)     
 
         self.goal_cmd_rotation = msg.angular.z
-        self.pid_rot.setpoint = self.goal_cmd_vel
-        setpoint = self.pid_rot(float(self.current_velocity_localFrame.y))
-        # self.send_steer_command(setpoint)
+        self.pid_rot.setpoint = self.goal_cmd_rotation
+        dt = 0.1
+        q_prev = [self.previous_rotation_marsFrame.w,
+                  self.previous_rotation_marsFrame.x,
+                  self.previous_rotation_marsFrame.y,
+                  self.previous_rotation_marsFrame.z]
+        q_next = [self.current_rotation_marsFrame.w,
+                  self.current_rotation_marsFrame.x,
+                  self.current_rotation_marsFrame.y,
+                  self.current_rotation_marsFrame.z]
+        omega = self.angular_velocity_body(q_prev, q_next, 0.1)
+
+        steer_cmd = self.pid_rot(omega[2])
+        self.send_steer_command(-steer_cmd)
+        
     
     def location_marsFrame_callback(self, msg):
         self.current_location_marsFrame = msg
@@ -80,6 +132,7 @@ class RoverController(Node):
         self.current_velocity_marsFrame = msg
 
     def rotation_marsFrame_callback(self, msg):
+        self.previous_rotation_marsFrame = self.current_rotation_marsFrame
         self.current_rotation_marsFrame = msg
 
     def location_localFrame_callback(self, msg):
@@ -273,6 +326,8 @@ class RoverController(Node):
         #         f"Accel: {accel_command:.2f}"
         #     )
         self.navigation_iterations += 1
+    
+
 
 
 def main(args=None):
