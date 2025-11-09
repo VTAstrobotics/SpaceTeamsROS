@@ -28,9 +28,9 @@ class RoverController(Node):
         self.current_location_marsFrame = None
         self.current_velocity_marsFrame = None
         self.current_rotation_marsFrame = None
-        self.previous_rotation_marsFrame = None
         self.current_location_localFrame = None
         self.current_velocity_localFrame = None
+        self.previous_rotation_localFrame = None
         self.current_rotation_localFrame = None
         self.state = "Driving"
 
@@ -43,7 +43,7 @@ class RoverController(Node):
 
         self.create_subscription(Point, 'CoreSamplingComplete', self.core_sampling_complete_callback, 1)
 
-        self.odom_publisher = self.create_publisher(Odometry, '/odom')
+        self.odom_publisher = self.create_publisher(Odometry, '/odom', 10)
 
         # Control state
         self.target_loc_localFrame = None
@@ -66,25 +66,30 @@ class RoverController(Node):
         self.timer_odom = self.create_timer(0.1, self.timer_callback_odom)
         self.get_logger().info('Odom message timer ready')
 
-
     def location_marsFrame_callback(self, msg):
-        self.current_location_marsFrame = msg
+        if not self.current_location_marsFrame == msg:
+            self.current_location_marsFrame = msg
     
     def velocity_marsFrame_callback(self, msg):
-        self.current_velocity_marsFrame = msg
+        if (msg.x != 0.0 and msg.y != 0.0 and msg.z != 0.0) or self.current_velocity_marsFrame == None:
+            self.current_velocity_marsFrame = msg
 
     def rotation_marsFrame_callback(self, msg):
-        self.previous_rotation_marsFrame = self.current_rotation_marsFrame
-        self.current_rotation_marsFrame = msg
+        if not self.current_rotation_marsFrame == msg:
+            self.current_rotation_marsFrame = msg
 
     def location_localFrame_callback(self, msg):
-        self.current_location_localFrame = msg
+        if not self.current_location_localFrame == msg:
+            self.current_location_localFrame = msg
 
     def velocity_localFrame_callback(self, msg):
-        self.current_velocity_localFrame = msg
+        if (msg.x != 0.0 and msg.y != 0.0 and msg.z != 0.0) or self.current_velocity_localFrame == None:
+            self.current_velocity_localFrame = msg
 
     def rotation_localFrame_callback(self, msg):
-        self.current_rotation_localFrame = msg
+        if not self.previous_rotation_localFrame == msg:
+            self.previous_rotation_localFrame = self.current_rotation_localFrame
+            self.current_rotation_localFrame = msg
     
     def core_sampling_complete_callback(self, msg):
         self.state = "Driving"
@@ -278,29 +283,33 @@ class RoverController(Node):
 
         odom_msg.pose = PoseWithCovariance()
         odom_msg.pose.pose = Pose()
-        odom_msg.pose.pose.position = self.current_location_marsFrame
-        odom_msg.pose.pose.orientation = self.current_rotation_marsFrame
+        odom_msg.pose.pose.position = Point(x = self.current_location_localFrame.x,
+                                            y = self.current_location_localFrame.y,
+                                            z = self.current_location_localFrame.z)
+        odom_msg.pose.pose.orientation = Quaternion(w = self.current_rotation_localFrame.w,
+                                                    x = self.current_rotation_localFrame.x,
+                                                    y = self.current_rotation_localFrame.y,
+                                                    z = self.current_rotation_localFrame.z)
         odom_msg.pose.covariance = [0.0] * 36
 
         odom_msg.twist = TwistWithCovariance()
         odom_msg.twist.twist = Twist()
-        odom_msg.twist.twist.linear = Vector3(self.current_velocity_localFrame.x,
-                                          self.current_velocity_localFrame.y,
-                                          self.current_velocity_localFrame.z)
+        odom_msg.twist.twist.linear = Vector3(x = self.current_velocity_localFrame.x,
+                                        y = self.current_velocity_localFrame.y,
+                                        z = self.current_velocity_localFrame.z)
         dt = 0.1
-        q_prev = [self.previous_rotation_marsFrame.w,
-                  self.previous_rotation_marsFrame.x,
-                  self.previous_rotation_marsFrame.y,
-                  self.previous_rotation_marsFrame.z]
-        q_next = [self.current_rotation_marsFrame.w,
-                  self.current_rotation_marsFrame.x,
-                  self.current_rotation_marsFrame.y,
-                  self.current_rotation_marsFrame.z]
+        q_prev = [self.previous_rotation_localFrame.w,
+                self.previous_rotation_localFrame.x,
+                self.previous_rotation_localFrame.y,
+                self.previous_rotation_localFrame.z]
+        q_next = [self.current_rotation_localFrame.w,
+                self.current_rotation_localFrame.x,
+                self.current_rotation_localFrame.y,
+                self.current_rotation_localFrame.z]
         omega = angular_velocity_body(q_prev, q_next, 0.1)
-        odom_msg.twist.twist.angular = Vector3(omega[0], omega[1], omega[2])
-
+        odom_msg.twist.twist.angular = Vector3(x = omega[0], y = omega[1], z = omega[2])
+        odom_msg.twist.covariance = [0.0] * 36
         self.odom_publisher.publish(odom_msg)
-        
         
 #Quaternion math
 def quat_inverse(q):
@@ -319,7 +328,10 @@ def quat_multiply(q1, q2):
 def angular_velocity_body(q_prev, q_next, dt):
     # Ensure shortest path (sign consistency)
     if np.dot(q_prev, q_next) < 0:
-        q_next = -q_next
+        q_next[0] *= -1
+        q_next[1] *= -1
+        q_next[2] *= -1
+        q_next[3] *= -1
 
     # Compute relative rotation
     q_delta = quat_multiply(quat_inverse(q_prev), q_next)
